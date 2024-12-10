@@ -126,13 +126,17 @@ class Bomb(pg.sprite.Sprite):
         self.rect.centerx = emy.rect.centerx
         self.rect.centery = emy.rect.centery+emy.rect.height//2
         self.speed = 6
+        self.state = "active"
 
     def update(self):
         """
         爆弾を速度ベクトルself.vx, self.vyに基づき移動させる
         引数 screen：画面Surface
         """
-        self.rect.move_ip(self.speed*self.vx, self.speed*self.vy)
+        if self.state == "active":  # 通常状態
+            self.rect.move_ip(self.speed * self.vx, self.speed * self.vy)
+        elif self.state == "inactive":  # 無効化状態
+            self.rect.move_ip((self.speed / 2) * self.vx, (self.speed / 2) * self.vy)
         if check_bound(self.rect) != (True, True):
             self.kill()
 
@@ -222,6 +226,49 @@ class Enemy(pg.sprite.Sprite):
             self.state = "stop"
         self.rect.move_ip(self.vx, self.vy)
 
+class EMP(pg.sprite.Sprite):
+    """
+    電磁パルス（EMP）に関するクラス
+    敵機と爆弾を無効化する。
+    """
+    def __init__(self, enemies: pg.sprite.Group, bombs: pg.sprite.Group, screen: pg.Surface):
+        """
+        EMP発動時の処理
+        enemies: 敵機のグループ
+        bombs: 爆弾のグループ
+        screen: 画面Surface
+        """
+        super().__init__()
+        self.enemies = enemies
+        self.bombs = bombs
+        self.screen = screen
+        self.timer = 3
+
+        # 敵機を無効化
+        for enemy in self.enemies:
+            enemy.interval = float('inf')  # 爆弾投下を停止
+            enemy.image = pg.transform.laplacian(enemy.image)  # 見た目変更
+        
+        # 爆弾を無効化
+        for bomb in self.bombs:
+            bomb.speed /= 2  # 動きを鈍化
+            bomb.state = "inactive"  # 起爆しない状態を追加
+
+    def update(self):
+        """
+        EMPエフェクトを画面に表示し、タイマーを管理する。
+        """
+        if self.timer > 0:
+            # 半透明の黄色矩形を画面全体に表示
+            overlay = pg.Surface((WIDTH, HEIGHT))
+            overlay.set_alpha(100)  # 透明度
+            overlay.fill((255, 255, 0))  # 黄色
+            self.screen.blit(overlay, (0, 0))
+            self.timer -= 1
+        else:
+            self.kill()
+
+
 
 class Score:
     """
@@ -232,7 +279,7 @@ class Score:
     def __init__(self):
         self.font = pg.font.Font(None, 50)
         self.color = (0, 0, 255)
-        self.value = 0
+        self.value = 100
         self.image = self.font.render(f"Score: {self.value}", 0, self.color)
         self.rect = self.image.get_rect()
         self.rect.center = 100, HEIGHT-50
@@ -306,6 +353,7 @@ def main():
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
+    emps = pg.sprite.Group()
     gravity = pg.sprite.Group()
     shields = pg.sprite.Group()
 
@@ -316,8 +364,13 @@ def main():
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 return 0
-            if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
-                beams.add(Beam(bird))
+            if event.type == pg.KEYDOWN:
+                if event.key == pg.K_SPACE:
+                    beams.add(Beam(bird))
+                if event.key == pg.K_e and score.value >= 20:  # EMP発動条件
+                    emps.add(EMP(emys, bombs, screen))
+                    score.value -= 20  # スコアを消費
+
             if event.type == pg.KEYDOWN and event.key == pg.K_RETURN and score.value >= 200:
                 gravity.add(Gravity(400))
                 score.value -= 200
@@ -347,11 +400,14 @@ def main():
             score.value += 1  # 1点アップ
 
         for bomb in pg.sprite.spritecollide(bird, bombs, True):  # こうかとんと衝突した爆弾リスト
-            bird.change_img(8, screen)  # こうかとん悲しみエフェクト
-            score.update(screen)
-            pg.display.update()
-            time.sleep(2)
-            return
+            if bomb.state == "active":
+            #if bomb.state == "active":
+            #    continue  # 爆弾が"active"状態の場合、何も起こらない
+                bird.change_img(8, screen)  # こうかとん悲しみエフェクト
+                score.update(screen)
+                pg.display.update()
+                time.sleep(2)
+                return
         
         for bomb in pg.sprite.groupcollide(bombs,gravity,True,False):  # 重力場と衝突した爆弾リスト
             exps.add(Explosion(bomb, 50))  # 爆発エフェクト
@@ -365,6 +421,7 @@ def main():
             exps.add(Explosion(bomb, 100))  # 爆発エフェクト
             score.value += 5  # 5点アップ
 
+
         bird.update(key_lst, screen)
         beams.update()
         beams.draw(screen)
@@ -372,6 +429,7 @@ def main():
         emys.draw(screen)
         bombs.update()
         bombs.draw(screen)
+        emps.update()  # EMPの更新
         exps.update()
         exps.draw(screen)
         gravity.update()
