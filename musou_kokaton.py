@@ -241,7 +241,27 @@ class Score:
         self.image = self.font.render(f"Score: {self.value}", 0, self.color)
         screen.blit(self.image, self.rect)
 
+class Gravity(pg.sprite.Sprite):
+    """
+    画面全体を覆う重力場を発生させる
+    重力場範囲内の爆弾を打ち落とす
+    必要コスト200
+    """
+    def __init__(self, life:int):
+        super().__init__()
+        self.image = pg.Surface((WIDTH,HEIGHT))
+        self.rect = self.image.get_rect()
+        pg.draw.rect(self.image,(0,0,0),(0,0,WIDTH,HEIGHT))
+        self.image.set_alpha(144)
+        self.life = life
 
+    def update(self):
+        self.life -= 1
+        if self.life < 0:
+            self.kill() 
+
+
+        
 class Shield(pg.sprite.Sprite):
     """
     爆弾からこうかとんを守るシールドを出現させるクラス
@@ -286,6 +306,7 @@ def main():
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
+    gravity = pg.sprite.Group()
     shields = pg.sprite.Group()
 
     tmr = 0
@@ -297,6 +318,9 @@ def main():
                 return 0
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
                 beams.add(Beam(bird))
+            if event.type == pg.KEYDOWN and event.key == pg.K_RETURN and score.value >= 200:
+                gravity.add(Gravity(400))
+                score.value -= 200
             if event.type == pg.KEYDOWN and event.key == pg.K_s:
                 if not shields and score.value >= 20:
                     shields.add(Shield(bird,400))
@@ -328,6 +352,14 @@ def main():
             pg.display.update()
             time.sleep(2)
             return
+        
+        for bomb in pg.sprite.groupcollide(bombs,gravity,True,False):  # 重力場と衝突した爆弾リスト
+            exps.add(Explosion(bomb, 50))  # 爆発エフェクト
+            score.value += 1  # 1点アップ
+        
+        for bomb in pg.sprite.groupcollide(emys,gravity,True,False):  # 重力場と衝突した爆弾リスト
+            exps.add(Explosion(bomb, 100))  # 爆発エフェクト
+            score.value += 10  # 10点アップ
 
         for bomb in pg.sprite.groupcollide(bombs, shields, True, False).keys():  # シールドと衝突した爆弾リスト 第四引数がFalseなので第二引数のshieldsはkillされない
             exps.add(Explosion(bomb, 100))  # 爆発エフェクト
@@ -342,6 +374,8 @@ def main():
         bombs.draw(screen)
         exps.update()
         exps.draw(screen)
+        gravity.update()
+        gravity.draw(screen)
         score.update(screen)
         shields.update()
         shields.draw(screen)
