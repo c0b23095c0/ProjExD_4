@@ -4,7 +4,7 @@ import random
 import sys
 import time
 import pygame as pg
-
+from math import degrees, atan2
 
 WIDTH = 1100  # ゲームウィンドウの幅
 HEIGHT = 650  # ゲームウィンドウの高さ
@@ -242,6 +242,31 @@ class Score:
         screen.blit(self.image, self.rect)
 
 
+class Shield(pg.sprite.Sprite):
+    """
+    爆弾からこうかとんを守るシールドを出現させるクラス
+    """
+    def __init__(self, bird:Bird, life:int):
+        super().__init__()
+        self.image = pg.Surface((10, 80))
+        #pg.draw.rect(self.image, (0,0,255),(bird.rect.centerx,0, bird.rect.right+10, bird.rect.centery+40))
+        pg.draw.rect(self.image, (0,0,255),(0,0,10,80))
+        vx, vy = bird.dire
+        deg = degrees(atan2(-vy, vx))
+        self.image = pg.transform.rotozoom(self.image, deg, 1)
+        self.image.set_colorkey((0,0,0))
+        self.life = life
+        self.bird = bird
+        self.rect = self.image.get_rect()
+        self.rect.centerx = bird.rect.centerx + (vx*40)
+        self.rect.centery = bird.rect.centery + (vy*40)
+
+    def update(self):
+        self.life -= 1
+        if(self.life <= 0):
+            self.kill()
+
+
 def main():
     pg.display.set_caption("真！こうかとん無双")
     screen = pg.display.set_mode((WIDTH, HEIGHT))
@@ -253,6 +278,7 @@ def main():
     beams = pg.sprite.Group()
     exps = pg.sprite.Group()
     emys = pg.sprite.Group()
+    shields = pg.sprite.Group()
 
     tmr = 0
     clock = pg.time.Clock()
@@ -263,6 +289,10 @@ def main():
                 return 0
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
                 beams.add(Beam(bird))
+            if event.type == pg.KEYDOWN and event.key == pg.K_s:
+                if not shields and score.value >= 20:
+                    shields.add(Shield(bird,400))
+                    score.value -= 20
         screen.blit(bg_img, [0, 0])
 
         if tmr%200 == 0:  # 200フレームに1回，敵機を出現させる
@@ -289,6 +319,10 @@ def main():
             time.sleep(2)
             return
 
+        for bomb in pg.sprite.groupcollide(bombs, shields, True, False).keys():  # シールドと衝突した爆弾リスト
+            exps.add(Explosion(bomb, 100))  # 爆発エフェクト
+            score.value += 15  # 15点アップ
+
         bird.update(key_lst, screen)
         beams.update()
         beams.draw(screen)
@@ -299,6 +333,8 @@ def main():
         exps.update()
         exps.draw(screen)
         score.update(screen)
+        shields.update()
+        shields.draw(screen)
         pg.display.update()
         tmr += 1
         clock.tick(50)
